@@ -1,0 +1,93 @@
+---
+title: "CLD"
+author: "Andrey"
+date: "2022-11-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(pROC)
+library(gtsummary)
+```
+
+## 1
+```{r}
+diabetes <- as_tibble(read.csv("diabetes.csv"))
+diabetes %>% glimpse()
+```
+
+Removing zeroes to NA, add new colum converting glucose level to mmol/l
+```{r}
+diabetes <- diabetes %>% mutate(`Glucose` = `Glucose` %>% na_if(0)) %>%
+  mutate(`BloodPressure` = `BloodPressure` %>% na_if(0)) %>%
+  mutate(`SkinThickness` = `SkinThickness` %>% na_if(0)) %>% 
+  mutate(`Insulin` = `Insulin` %>% na_if(0)) %>% 
+  mutate(`BMI` = `BMI` %>% na_if(0)) %>% 
+  mutate(`DiabetesPedigreeFunction` = `DiabetesPedigreeFunction` %>% na_if(0)) %>%      mutate(`Age` = `Age` %>% na_if(0)) 
+
+
+
+diabetes <- diabetes %>% mutate(`Glucose_mmol` = round(Glucose / 18, 1)) %>% select(!`Glucose`)  
+
+```
+
+Number of patients with increased glucose level and with normal level
+```{r}
+diabetes %>% filter(`Glucose_mmol` >= 7.8) %>% nrow()  #patients with increased level
+diabetes %>% filter(`Glucose_mmol` < 7.8) %>% nrow() #patients with normal level
+```
+
+##2
+```{r}
+diabetes <- diabetes %>% mutate(across(Outcome, ~ as.factor(.x)))
+roc_curve_1 <- roc(Outcome ~ Glucose_mmol, data = diabetes, ci = T)
+roc_curve_1
+
+ggroc(roc_curve_1) + 
+    theme_bw()
+```
+
+##3
+```{r}
+AUC = roc_curve_1$ci[2] %>% round(3)
+AUC
+```
+##4
+```{r}
+AUC_lower = roc_curve_1$ci[1] %>% round(3)
+AUC_upper = roc_curve_1$ci[3] %>% round(3)
+AUC_lower
+AUC_upper
+```
+##5 
+```{r}
+roc_curve_2 <- roc(Outcome ~ Insulin, data = diabetes, ci = T)
+roc_curve_2 %>% coords()
+
+roc_curve_2 %>% coords(x = "best", best.method = "closest.topleft")
+
+```
+##6
+```{r}
+AUC_diabetes <- diabetes %>% 
+    pivot_longer(cols = !Outcome) %>% 
+    group_by(name) %>% 
+    summarise(AUC = roc(Outcome, value, ci = T)$ci[2] %>% round(3),
+              AUC_LCL = roc(Outcome, value, ci = T)$ci[1] %>% round(3),
+              AUC_UCL = roc(Outcome, value, ci = T)$ci[3] %>% round(3))
+AUC_diabetes
+```
+
+Find the biggest and the smallest AUC
+```{r}
+biggest <- AUC_diabetes %>% filter(`AUC` == max(`AUC`, na.rm = T))
+biggest 
+
+small <- AUC_diabetes %>% filter(`AUC` == min(`AUC`, na.rm = T))
+small 
+```
+So we can say that the glucose level is the best numeric feature for diagnostic informativity. And the most lower level of diagnostic informativity has the diabetes pedigree function feature. 
